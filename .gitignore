@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# CMake
+build/
+compile_commands.json
+
+# VSCode
+.vscode
+
+# Clangd
+.clangd
