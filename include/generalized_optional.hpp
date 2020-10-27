@@ -2,6 +2,7 @@
 #define GUARD_GENERALIZED_OPTIONAL_HEADER
 
 #include <exception>
+#include <initializer_list>
 #include <type_traits>
 #include <utility>
 
@@ -9,13 +10,36 @@ namespace dpsg {
 
 namespace detail {
 template <class T> class generalized_optional_storage {
+  static_assert(!std::is_reference_v<T>,
+                "generalized_optional cannot contain a reference type. Store a "
+                "reference_wrapper or equivalent.");
+
 protected:
   std::aligned_storage_t<sizeof(T), alignof(T)> _storage;
+
+  constexpr generalized_optional_storage() = default;
+
+  constexpr T *get_ptr() { return static_cast<T *>(&_storage); }
+  constexpr T *get_ptr() const {
+    return const_cast<generalized_optional_storage *>(this)->get_ptr();
+  }
+  constexpr T &&get_ref() && { return reinterpret_cast<T &&>(_storage); }
+  constexpr T &&get_ref() const && { return reinterpret_cast<T &&>(_storage); }
+  constexpr T &get_ref() & { return reinterpret_cast<T &>(_storage); }
+  constexpr const T &get_ref() const & {
+    return reinterpret_cast<const T &>(_storage);
+  }
+  template <class... Args> constexpr void build(Args &&... args) {
+    ::new (&_storage) T{std::forward<Args>(args)...};
+  }
+  constexpr void destroy() { get_ref().~T(); }
 };
 } // namespace detail
 
 // Policies
-template <class T, T V> struct tombstone {};
+template <class T, T V> struct tombstone {
+  constexpr bool has_value() const { return get_ref() != V; }
+};
 template <class T> struct dependent_value { T dependent_value; };
 
 // Utilities
@@ -31,8 +55,8 @@ struct nullopt_t {
 template <class T, class Policy> class generalized_optional : Policy {
 public:
   using value_type = T;
-  constexpr generalized_optional() noexcept;
-  constexpr generalized_optional(nullopt_t) noexcept;
+  constexpr generalized_optional() noexcept = default;
+  constexpr generalized_optional(nullopt_t) noexcept {}
   constexpr generalized_optional(const generalized_optional &other);
   constexpr generalized_optional(generalized_optional &&other) noexcept(
       std::is_nothrow_move_constructible_v<T>);
