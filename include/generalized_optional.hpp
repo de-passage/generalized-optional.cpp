@@ -98,19 +98,19 @@ private:
   using storage = detail::generalized_optional_storage<value_type>;
   using storage::build;
   using storage::destroy;
-  constexpr void _clean() {
+  constexpr void _clean() noexcept(std::is_nothrow_destructible_v<value_type>) {
     if (has_value()) {
       destroy();
       policy::value_unset();
     }
   }
-  constexpr void _copy(const T &t) {
-    _clean();
+  constexpr void
+  _copy(const T &t) noexcept(std::is_nothrow_copy_constructible_v<value_type>) {
     build(t);
     policy::value_set();
   }
-  constexpr void _move(T &&t) {
-    _clean();
+  constexpr void
+  _move(T &&t) noexcept(std::is_nothrow_move_constructible_v<value_type>) {
     build(std::move(t));
     policy::value_set();
   }
@@ -119,31 +119,50 @@ public:
   using policy::has_value;
   constexpr generalized_optional() noexcept = default;
   constexpr generalized_optional(nullopt_t) noexcept {}
-  constexpr generalized_optional(const generalized_optional &other) {
+  constexpr generalized_optional(const generalized_optional &other) noexcept(
+      std::is_nothrow_copy_constructible_v<T>) {
     if (other.has_value()) {
       _copy(other.get_ref());
     }
   }
   constexpr generalized_optional(generalized_optional &&other) noexcept(
-      std::is_nothrow_move_constructible_v<T>);
+      std::is_nothrow_move_constructible_v<T>) {
+    if (other.has_value()) {
+      _move(std::move(other));
+    }
+  }
+  template <class U, class P,
+            std::enable_if_t<std::is_constructible_v<T, U>> = 0>
+  generalized_optional(const generalized_optional<U, P> &other) noexcept(
+      std::is_nothrow_constructible_v<T, U>) {
+    if (other.has_value()) {
+      _copy(other.get_ref());
+    }
+  }
   template <class U, class P>
-  generalized_optional(const generalized_optional<U, P> &other);
-  template <class U, class P>
-  generalized_optional(generalized_optional<U, P> &&other);
+  generalized_optional(generalized_optional<U, P> &&other) noexcept(
+      std::is_nothrow_constructible_v<T, U>) {
+    if (other.has_value()) {
+      _move(std::move(other).get_ref());
+    }
+  }
   template <class... Args>
-  constexpr explicit generalized_optional(in_place_t, Args &&... args);
+  constexpr explicit generalized_optional(in_place_t, Args &&... args) {
+    storage::build(std::forward<Args>(args)...);
+    policy::value_set();
+  }
   template <class U, class... Args>
   constexpr explicit generalized_optional(in_place_t,
                                           std::initializer_list<U> ilist,
                                           Args &&... args);
   template <class U = value_type> constexpr generalized_optional(U &&value) {
-    storage::build(std::move(value));
+    storage::build(std::forward<U>(value));
     policy::value_set();
   }
 
   ~generalized_optional() { _clean(); }
 
-  generalized_optional &operator=(nullopt_t) noexcept;
+  generalized_optional &operator=(nullopt_t) noexcept { _clean(); }
   constexpr generalized_optional &operator=(const generalized_optional &other);
   constexpr generalized_optional &
   operator=(generalized_optional &&other) noexcept(
@@ -155,29 +174,52 @@ public:
   template <class U, class P>
   generalized_optional &operator=(generalized_optional<U, P> &&other);
 
-  constexpr const T *operator->() const;
-  constexpr T *operator->();
-  constexpr const T &operator*() const &;
+  constexpr const T *operator->() const { return storage::get_ptr(); }
+  constexpr T *operator->() { return storage::get_ptr(); }
+  constexpr const T &operator*() const & { return storage::get_ref(); }
   constexpr T &operator*() & { return storage::get_ref(); }
-  constexpr const T &&operator*() const &&;
-  constexpr T &&operator*() &&;
-  constexpr explicit operator bool() const noexcept;
+  constexpr const T &&operator*() const && { return storage::get_ref(); }
+  constexpr T &&operator*() && { return storage::get_ref(); }
+  constexpr explicit operator bool() const noexcept {
+    return policy::has_value();
+  }
 
-  constexpr T &value() &;
-  constexpr const T &value() const &;
-  constexpr T &&value() &&;
-  constexpr const T &&value() const &&;
+  constexpr T &value() & { return storage::get_ref(); }
+  constexpr const T &value() const & { return storage::get_ref(); }
+  constexpr T &&value() && { return storage::get_ref(); }
+  constexpr const T &&value() const && { return storage::get_ref(); }
 
-  template <class U> constexpr T value_or(U &&default_value) const &;
-  template <class U> constexpr T value_or(U &&default_value) &&;
+  template <class U> constexpr T value_or(U &&default_value) const & {
+    if (has_value())
+      return storage::get_ref();
+    else
+      return static_cast<T>(std::forward<U>(default_value));
+  }
+  template <class U> constexpr T value_or(U &&default_value) && {
+    if (has_value())
+      return storage::get_ref();
+    else
+      return static_cast<T>(std::forward<U>(default_value));
+  }
 
   void swap(generalized_optional &other) noexcept(
       std::is_nothrow_move_constructible_v<T> &&std::is_nothrow_swappable_v<T>);
 
-  void reset() noexcept;
-  template <class... Args> T &emplace(Args &&... args);
+  void reset() noexcept { _clean(); }
+  template <class... Args> T &emplace(Args &&... args) {
+    if (has_value()) {
+      storage::destroy();
+    }
+    storage::build(std::forward<Args>(args)...);
+  }
+
   template <class U, class... Args>
-  T &emplace(std::initializer_list<U> ilist, Args &&... args);
+  T &emplace(std::initializer_list<U> ilist, Args &&... args) {
+    if (has_value()) {
+      storage::destroy();
+    }
+    storage::build(std::move(ilist), std::forward<Args>(args)...);
+  }
 };
 
 template <class T> using optional = generalized_optional<T, dependent_bool>;
