@@ -5,7 +5,15 @@
 #include <string>
 #include <vector>
 
-TEST(GeneralizedOptional, ShouldCompile) {}
+TEST(GeneralizedOptional, Ctor) {
+  dpsg::optional<int> i;
+  dpsg::optional<int> i2{dpsg::nullopt};
+  ASSERT_FALSE(i.has_value());
+  ASSERT_FALSE(i2.has_value());
+  dpsg::optional<int> i3{42};
+  ASSERT_TRUE(i3.has_value());
+  ASSERT_EQ(*i3, 42);
+}
 
 template <class T>
 struct show_impl : dpsg::detail::generalized_optional_storage<T> {
