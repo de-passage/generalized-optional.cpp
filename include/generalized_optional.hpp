@@ -163,16 +163,66 @@ public:
   ~generalized_optional() { _clean(); }
 
   generalized_optional &operator=(nullopt_t) noexcept { _clean(); }
-  constexpr generalized_optional &operator=(const generalized_optional &other);
+
+  constexpr generalized_optional &operator=(const generalized_optional &other) {
+    if (other.has_value()) {
+      if (has_value()) {
+        get_ref() = other.get_ref();
+      } else {
+        _copy(other.get_ref());
+      }
+    } else {
+      _clean();
+    }
+  }
+
   constexpr generalized_optional &
   operator=(generalized_optional &&other) noexcept(
       std::is_nothrow_move_assignable<T>::value
-          &&std::is_nothrow_move_constructible<T>::value);
-  template <class U = value_type> generalized_optional &operator=(U &&value);
+          &&std::is_nothrow_move_constructible<T>::value) {
+    if (other.has_value()) {
+      if (has_value()) {
+        get_ref() = std::move(other).get_ref();
+      } else {
+        _move(std::move(other).get_ref());
+      }
+    } else {
+      _clean();
+    }
+  }
+
+  template <class U = value_type>
+  constexpr generalized_optional &operator=(U &&value) {
+    get_ref() = std::forward<U>(value);
+  }
+
   template <class U, class P>
-  generalized_optional &operator=(const generalized_optional<U, P> &other);
+  constexpr generalized_optional &
+  operator=(const generalized_optional<U, P> &other) {
+    if (other.has_value()) {
+      if (has_value()) {
+        get_ref() = other.get_ref();
+      } else {
+        _copy(other.get_ref());
+      }
+    } else {
+      _clean();
+    }
+  }
+
   template <class U, class P>
-  generalized_optional &operator=(generalized_optional<U, P> &&other);
+  constexpr generalized_optional &
+  operator=(generalized_optional<U, P> &&other) {
+    if (other.has_value()) {
+      if (has_value()) {
+        get_ref() = std::move(other).get_ref();
+      } else {
+        _move(std::move(other).get_ref());
+      }
+    } else {
+      _clean();
+    }
+  }
 
   constexpr const T *operator->() const { return storage::get_ptr(); }
   constexpr T *operator->() { return storage::get_ptr(); }
@@ -203,7 +253,21 @@ public:
   }
 
   void swap(generalized_optional &other) noexcept(
-      std::is_nothrow_move_constructible_v<T> &&std::is_nothrow_swappable_v<T>);
+      std::is_nothrow_move_constructible_v<T>
+          &&std::is_nothrow_swappable_v<T>) {
+    using namespace std;
+    if (has_value()) {
+      if (other.has_value()) {
+        swap(get_ref(), other.get_ref());
+      } else {
+        other._move(std::move(get_ref()));
+        _clean();
+      }
+    } else if (other.has_value()) {
+      _move(std::move(other.get_ref()));
+      other._clean();
+    }
+  }
 
   void reset() noexcept { _clean(); }
   template <class... Args> T &emplace(Args &&... args) {
