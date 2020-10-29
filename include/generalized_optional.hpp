@@ -9,6 +9,9 @@
 namespace dpsg {
 
 namespace detail {
+template <class T>
+using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+
 template <class T> class generalized_optional_storage {
   static_assert(!std::is_reference_v<T>,
                 "generalized_optional cannot contain a reference type. Store a "
@@ -155,7 +158,32 @@ public:
   constexpr explicit generalized_optional(in_place_t,
                                           std::initializer_list<U> ilist,
                                           Args &&... args);
-  template <class U = value_type> constexpr generalized_optional(U &&value) {
+
+private:
+  template <class Ty>
+  using allow_direct_conversion = std::bool_constant<std::conjunction_v<
+      std::negation<
+          std::is_same<detail::remove_cvref_t<Ty>, generalized_optional>>,
+      std::negation<std::is_same<detail::remove_cvref_t<Ty>, in_place_t>>,
+      std::is_constructible<value_type, Ty>>>;
+
+public:
+  template <
+      class U = value_type,
+      std::enable_if_t<std::conjunction_v<allow_direct_conversion<U>,
+                                          std::is_convertible<U, value_type>>,
+                       int> = 0>
+  constexpr generalized_optional(U &&value) {
+    storage::build(std::forward<U>(value));
+    policy::value_set();
+  }
+  template <
+      class U = value_type,
+      std::enable_if_t<
+          std::conjunction_v<allow_direct_conversion<U>,
+                             std::negation<std::is_convertible<U, value_type>>>,
+          int> = 0>
+  constexpr explicit generalized_optional(U &&value) {
     storage::build(std::forward<U>(value));
     policy::value_set();
   }
