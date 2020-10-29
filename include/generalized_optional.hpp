@@ -54,7 +54,7 @@ template <class B> struct base {
 };
 } // namespace detail
 
-template <class T, T V> struct tombstone {
+template <class T, T V = T{}> struct tombstone {
   template <class B> struct type : detail::base<B> {
     constexpr bool has_value() const noexcept { return self()->get_ref() != V; }
 

@@ -48,7 +48,8 @@ if (CMAKE_VERSION VERSION_LESS 2.8.11)
 endif()
 
 set(TEST_SRC
-    tests/optional.cpp)
+    tests/optional.cpp
+    tests/static_tests.cpp)
 add_executable(tests ${TEST_SRC})
 target_link_libraries(tests gtest_main)
 target_include_directories(tests PUBLIC include)
