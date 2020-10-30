@@ -199,3 +199,19 @@ TEST(Optional, Emplace) {
   ASSERT_TRUE(o2.has_value());
   ASSERT_EQ(o2->size(), 0);
 }
+
+struct dtor_recorder {
+  dtor_recorder() = delete;
+  dtor_recorder(const dtor_recorder &) = delete;
+  dtor_recorder(dtor_recorder &&) = delete;
+  dtor_recorder(int &i) : calls(std::addressof(i)) {}
+
+  ~dtor_recorder() { ++*calls; }
+  int *calls;
+};
+
+TEST(Optional, Dtor) {
+  int calls = 0;
+  { dpsg::optional<dtor_recorder> o{calls}; }
+  ASSERT_EQ(calls, 1);
+}
