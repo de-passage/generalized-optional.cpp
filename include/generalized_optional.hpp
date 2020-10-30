@@ -362,6 +362,34 @@ public:
     policy::value_set();
     return storage::get_ref();
   }
+
+  template <class U, class F>
+  [[nodiscard]] constexpr U with_value(F &&func, U &&default_value) const & {
+    if (has_value()) {
+      return std::forward<F>(func)(storage::get_ref());
+    }
+    return std::forward<U>(default_value);
+  }
+
+  template <class U, class F>
+  [[nodiscard]] constexpr U with_value(F &&func, U &&default_value) && {
+    if (has_value()) {
+      return std::forward<F>(func)(std::move(storage::get_ref()));
+    }
+    return std::forward<U>(default_value);
+  }
+
+  template <class F> constexpr void with_value(F &&func) const & {
+    if (has_value()) {
+      std::forward<F>(func)(storage::get_ref());
+    }
+  }
+
+  template <class F> constexpr void with_value(F &&func) && {
+    if (has_value()) {
+      std::forward<F>(func)(std::move(storage::get_ref()));
+    }
+  }
 };
 
 template <class T> using optional = generalized_optional<T, dependent_bool>;

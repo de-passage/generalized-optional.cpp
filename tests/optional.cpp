@@ -204,7 +204,9 @@ struct dtor_recorder {
   dtor_recorder() = delete;
   dtor_recorder(const dtor_recorder &) = delete;
   dtor_recorder(dtor_recorder &&) = delete;
-  dtor_recorder(int &i) : calls(std::addressof(i)) {}
+  explicit dtor_recorder(int &i) : calls(std::addressof(i)) {}
+  dtor_recorder &operator=(const dtor_recorder &) = delete;
+  dtor_recorder &operator=(dtor_recorder &&) = delete;
 
   ~dtor_recorder() { ++*calls; }
   int *calls;
@@ -214,4 +216,40 @@ TEST(Optional, Dtor) {
   int calls = 0;
   { dpsg::optional<dtor_recorder> o{calls}; }
   ASSERT_EQ(calls, 1);
+}
+
+struct noncopyable_string {
+  noncopyable_string() = default;
+  explicit noncopyable_string(string s) : _value(std::move(s)) {}
+  noncopyable_string(const noncopyable_string &) = delete;
+  noncopyable_string(noncopyable_string &&) = default;
+  noncopyable_string &operator=(const noncopyable_string &) = delete;
+  noncopyable_string &operator=(noncopyable_string &&) = default;
+  ~noncopyable_string() = default;
+
+  [[nodiscard]] const string &value() const { return _value; }
+
+private:
+  string _value;
+};
+
+dpsg::optional<noncopyable_string> make_ncs(string s) {
+  return dpsg::optional<noncopyable_string>{std::move(s)};
+}
+
+TEST(Optional, WithValue) {
+  using ncs = dpsg::optional<noncopyable_string>;
+  ncs n{hello_world};
+  const auto f = [](const noncopyable_string &s) -> int {
+    return s.value() == hello_world ? 1 : 0;
+  };
+  ASSERT_EQ(n.with_value(f, -1), 1);
+  ncs n2;
+  ASSERT_EQ(n2.with_value(f, -1), -1);
+
+  const auto g = [](noncopyable_string &&s) -> int {
+    return s.value() == hello_world ? 1 : 0;
+  };
+  ASSERT_EQ(make_ncs(something_else).with_value(g, -1), 0);
+  ASSERT_EQ(dpsg::optional<noncopyable_string>{}.with_value(g, -1), -1);
 }
