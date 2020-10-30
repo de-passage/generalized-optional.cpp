@@ -65,9 +65,40 @@ TEST(Optional, MoveCtor) {
   ASSERT_FALSE(s2.has_value());
   using om = dpsg::optional<move_recorder>;
   om m{dpsg::in_place};
+  ASSERT_FALSE(m->moved_from);
   om m2{std::move(m)};
   ASSERT_TRUE(m.has_value()); // NOLINT intentional
   ASSERT_TRUE(m2.has_value());
   ASSERT_TRUE(m->moved_from); // NOLINT intentional
   ASSERT_TRUE(m2->moved_into);
+}
+
+TEST(Optional, CopyAssign) {
+  dpsg::optional<string> s;
+  dpsg::optional<string> s2;
+  s = s2;
+  ASSERT_FALSE(s.has_value());
+  ASSERT_FALSE(s2.has_value());
+  using om = dpsg::optional<move_recorder>;
+  om m{dpsg::nullopt};
+  move_recorder mr1;
+  ASSERT_FALSE(mr1.moved_from);
+  ASSERT_FALSE(m.has_value());
+  m = mr1;
+  ASSERT_FALSE(mr1.moved_from);
+  ASSERT_TRUE(m.has_value());
+  ASSERT_FALSE(m->moved_into);
+  om m2{mr1};
+  ASSERT_FALSE(mr1.moved_from);
+  ASSERT_TRUE(m2.has_value());
+  ASSERT_FALSE(m2->moved_into);
+  m = m2;
+  ASSERT_FALSE(m2->moved_from);
+  ASSERT_FALSE(m->moved_into);
+
+  s = hello_world;
+  s2 = s;
+  ASSERT_TRUE(s.has_value());
+  ASSERT_TRUE(s2.has_value());
+  ASSERT_EQ(*s, *s2);
 }

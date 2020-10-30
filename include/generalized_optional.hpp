@@ -222,13 +222,14 @@ public:
     }
     if (other.has_value()) {
       if (has_value()) {
-        get_ref() = other.get_ref();
+        storage::get_ref() = other.get_ref();
       } else {
         _copy(other.get_ref());
       }
     } else {
       _clean();
     }
+    return *this;
   }
 
   constexpr generalized_optional &
@@ -237,18 +238,26 @@ public:
           &&std::is_nothrow_move_constructible<T>::value) {
     if (other.has_value()) {
       if (has_value()) {
-        get_ref() = std::move(other).get_ref();
+        storage::get_ref() = std::move(other).get_ref();
       } else {
         _move(std::move(other).get_ref());
       }
     } else {
       _clean();
     }
+    return *this;
   }
 
-  template <class U = value_type>
+  template <class U = value_type,
+            std::enable_if_t<allow_direct_conversion<U>::value, int> = 0>
   constexpr generalized_optional &operator=(U &&value) {
-    get_ref() = std::forward<U>(value);
+    if (has_value()) {
+      storage::get_ref() = std::forward<U>(value);
+    } else {
+      build(std::forward<U>(value));
+      policy::value_set();
+    }
+    return *this;
   }
 
   template <class U, class P>
@@ -256,13 +265,14 @@ public:
   operator=(const generalized_optional<U, P> &other) {
     if (other.has_value()) {
       if (has_value()) {
-        get_ref() = other.get_ref();
+        storage::get_ref() = other.get_ref();
       } else {
         _copy(other.get_ref());
       }
     } else {
       _clean();
     }
+    return *this;
   }
 
   template <class U, class P>
@@ -270,7 +280,7 @@ public:
   operator=(generalized_optional<U, P> &&other) {
     if (other.has_value()) {
       if (has_value()) {
-        get_ref() = std::move(other).get_ref();
+        storage::get_ref() = std::move(other).get_ref();
       } else {
         _move(std::move(other).get_ref());
       }
