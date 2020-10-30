@@ -63,11 +63,11 @@ template <class B> struct base {
 template <class T, T V = T{}> struct tombstone {
   template <class B> struct type : detail::base<B> {
     [[nodiscard]] constexpr bool has_value() const noexcept {
-      return self()->get_ref() != V;
+      return detail::base<B>::self()->get_ref() != V;
     }
 
   protected:
-    constexpr type() noexcept { self()->build(V); }
+    constexpr type() noexcept { detail::base<B>::self()->build(V); }
     constexpr void value_set() const noexcept {}
     constexpr void value_unset() const noexcept {};
   };
@@ -102,7 +102,7 @@ struct nullopt_t {
 
 template <class T, class Policy>
 class generalized_optional
-    : detail::generalized_optional_storage<T>,
+    : protected detail::generalized_optional_storage<T>,
       public Policy::template type<generalized_optional<T, Policy>> {
 public:
   using value_type = T;
@@ -412,9 +412,8 @@ struct deduce_tombstone_value<T, std::enable_if_t<std::is_pointer_v<T>>> {
 
 } // namespace detail
 
-template <class T>
-using optional_tombstone = generalized_optional<
-    T, tombstone<T, detail::deduce_tombstone_value<T>::value>>;
+template <class T, T Default = detail::deduce_tombstone_value<T>::value>
+using optional_tombstone = generalized_optional<T, tombstone<T, Default>>;
 
 } // namespace dpsg
 
