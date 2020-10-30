@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-
 template <class T>
 struct show_impl : dpsg::detail::generalized_optional_storage<T> {
   using dpsg::detail::generalized_optional_storage<T>::build;
@@ -22,9 +21,9 @@ TEST(GeneralizedOptionalStorage, ShouldWork) {
   initializer_list<string> l{"Hello", " World!",
                              " This is a fairly long character string!!"};
   g.build(l);
-  auto it = begin(l);
+  const auto *it = begin(l);
   for (auto &v : g.get_ref()) {
-    ASSERT_EQ(v, *it++);
+    ASSERT_EQ(v, *it++); // NOLINT
   }
 
   g.destroy();

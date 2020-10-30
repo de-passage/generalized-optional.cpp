@@ -24,17 +24,20 @@ protected:
 
   constexpr T *get_ptr() noexcept { return static_cast<T *>(&_storage); }
   constexpr T *get_ptr() const noexcept {
-    return const_cast<generalized_optional_storage *>(this)->get_ptr();
+    return const_cast<generalized_optional_storage *>(this) /* NOLINT */
+        ->get_ptr();
   }
   constexpr T &&get_ref() &&noexcept {
-    return reinterpret_cast<T &&>(_storage);
+    return reinterpret_cast<T &&>(_storage); // NOLINT
   }
   constexpr T &&get_ref() const &&noexcept {
-    return reinterpret_cast<T &&>(_storage);
+    return reinterpret_cast<T &&>(_storage); // NOLINT
   }
-  constexpr T &get_ref() &noexcept { return reinterpret_cast<T &>(_storage); }
+  constexpr T &get_ref() &noexcept {
+    return reinterpret_cast<T &>(_storage); // NOLINT
+  }
   constexpr const T &get_ref() const &noexcept {
-    return reinterpret_cast<const T &>(_storage);
+    return reinterpret_cast<const T &>(_storage); // NOLINT
   }
   template <class... Args> constexpr void build(Args &&... args) {
     ::new (&_storage) T{std::forward<Args>(args)...};
@@ -56,7 +59,9 @@ template <class B> struct base {
 
 template <class T, T V = T{}> struct tombstone {
   template <class B> struct type : detail::base<B> {
-    constexpr bool has_value() const noexcept { return self()->get_ref() != V; }
+    [[nodiscard]] constexpr bool has_value() const noexcept {
+      return self()->get_ref() != V;
+    }
 
   protected:
     constexpr type() noexcept { self()->build(V); }
@@ -74,13 +79,17 @@ struct dependent_bool {
     constexpr void value_unset() noexcept { _has_value = false; }
 
   public:
-    constexpr bool has_value() const noexcept { return _has_value; }
+    [[nodiscard]] constexpr bool has_value() const noexcept {
+      return _has_value;
+    }
   };
 };
 
 // Utilities
 struct bad_optional_access : std::exception {
-  const char *what() const override { return "bad optional access"; }
+  [[nodiscard]] const char *what() const override {
+    return "bad optional access";
+  }
 };
 
 struct in_place_t {
@@ -121,7 +130,9 @@ private:
 public:
   using policy::has_value;
   constexpr generalized_optional() noexcept = default;
-  constexpr generalized_optional(nullopt_t) noexcept {}
+  // NOLINTNEXTLINE
+  constexpr generalized_optional([
+      [maybe_unused]] nullopt_t empty_ctor) noexcept {}
   constexpr generalized_optional(const generalized_optional &other) noexcept(
       std::is_nothrow_copy_constructible_v<T>) {
     if (other.has_value()) {
@@ -136,6 +147,7 @@ public:
   }
   template <class U, class P,
             std::enable_if_t<std::is_constructible_v<T, U>> = 0>
+  // NOLINTNEXTLINE
   generalized_optional(const generalized_optional<U, P> &other) noexcept(
       std::is_nothrow_constructible_v<T, U>) {
     if (other.has_value()) {
@@ -143,6 +155,7 @@ public:
     }
   }
   template <class U, class P>
+  // NOLINTNEXTLINE
   generalized_optional(generalized_optional<U, P> &&other) noexcept(
       std::is_nothrow_constructible_v<T, U>) {
     if (other.has_value()) {
@@ -150,14 +163,18 @@ public:
     }
   }
   template <class... Args>
-  constexpr explicit generalized_optional(in_place_t, Args &&... args) {
+  constexpr explicit generalized_optional(
+      [[maybe_unused]] in_place_t in_place_ctor, Args &&... args) {
     storage::build(std::forward<Args>(args)...);
     policy::value_set();
   }
   template <class U, class... Args>
-  constexpr explicit generalized_optional(in_place_t,
-                                          std::initializer_list<U> ilist,
-                                          Args &&... args);
+  constexpr explicit generalized_optional(
+      [[maybe_unused]] in_place_t in_place_ctor, std::initializer_list<U> ilist,
+      Args &&... args) {
+    storage::build(ilist, std::forward<Args>(args)...);
+    policy::value_set();
+  }
 
 private:
   template <class Ty>
@@ -173,6 +190,7 @@ public:
       std::enable_if_t<std::conjunction_v<allow_direct_conversion<U>,
                                           std::is_convertible<U, value_type>>,
                        int> = 0>
+  // NOLINTNEXTLINE
   constexpr generalized_optional(U &&value) {
     storage::build(std::forward<U>(value));
     policy::value_set();
@@ -183,6 +201,7 @@ public:
           std::conjunction_v<allow_direct_conversion<U>,
                              std::negation<std::is_convertible<U, value_type>>>,
           int> = 0>
+  // NOLINTNEXTLINE
   constexpr explicit generalized_optional(U &&value) {
     storage::build(std::forward<U>(value));
     policy::value_set();
@@ -190,9 +209,15 @@ public:
 
   ~generalized_optional() { _clean(); }
 
-  generalized_optional &operator=(nullopt_t) noexcept { _clean(); }
+  generalized_optional &operator=([
+      [maybe_unused]] nullopt_t empty_assignment) noexcept {
+    _clean();
+  }
 
   constexpr generalized_optional &operator=(const generalized_optional &other) {
+    if (std::addressof(other) == this) {
+      return *this;
+    }
     if (other.has_value()) {
       if (has_value()) {
         get_ref() = other.get_ref();
@@ -268,16 +293,16 @@ public:
   constexpr const T &&value() const && { return storage::get_ref(); }
 
   template <class U> constexpr T value_or(U &&default_value) const & {
-    if (has_value())
+    if (has_value()) {
       return storage::get_ref();
-    else
-      return static_cast<T>(std::forward<U>(default_value));
+    }
+    return static_cast<T>(std::forward<U>(default_value));
   }
   template <class U> constexpr T value_or(U &&default_value) && {
-    if (has_value())
+    if (has_value()) {
       return storage::get_ref();
-    else
-      return static_cast<T>(std::forward<U>(default_value));
+    }
+    return static_cast<T>(std::forward<U>(default_value));
   }
 
   void swap(generalized_optional &other) noexcept(
