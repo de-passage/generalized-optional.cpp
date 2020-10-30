@@ -131,7 +131,7 @@ public:
   constexpr generalized_optional(generalized_optional &&other) noexcept(
       std::is_nothrow_move_constructible_v<T>) {
     if (other.has_value()) {
-      _move(std::move(other));
+      _move(std::move(other).get_ref());
     }
   }
   template <class U, class P,
