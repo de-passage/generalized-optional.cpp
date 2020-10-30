@@ -3,11 +3,14 @@
 
 #include <initializer_list>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace std;
 
 constexpr static inline const char *hello_world = "Hello World!";
+constexpr static inline const char *something_else = "something else";
+constexpr static inline const char *one_last_thing = "one last thing";
 constexpr static inline int fourtytwo = 42;
 
 TEST(Optional, Ctor) {
@@ -148,7 +151,7 @@ TEST(Optional, Swap) {
   ASSERT_FALSE(s.has_value());
   ASSERT_FALSE(s2.has_value());
 
-  const string str = "something else";
+  const string str{something_else};
   s = str;
   s2 = hello_world;
   s.swap(s2);
@@ -173,4 +176,26 @@ TEST(Optional, Swap) {
   dpsg::optional<noncopyable> ncp2{dpsg::in_place};
   ncp1.swap(ncp2);
   swap(ncp1, ncp2);
+}
+
+TEST(Optional, ValueOr) {
+  dpsg::optional<int> i1;
+  dpsg::optional<int> i2{fourtytwo};
+  ASSERT_EQ(i1.value_or(0), 0);
+  ASSERT_EQ(i2.value_or(0), fourtytwo);
+}
+
+TEST(Optional, Emplace) {
+  using ovs = dpsg::optional<vector<string>>;
+  ovs o1;
+  ovs o2{{something_else, hello_world, one_last_thing}};
+
+  o1.emplace({string{hello_world}, string{something_else}});
+  ASSERT_TRUE(o1.has_value());
+  ASSERT_EQ((*o1)[0], hello_world);
+  ASSERT_EQ((*o1)[1], something_else);
+
+  o2.emplace(static_cast<std::size_t>(0));
+  ASSERT_TRUE(o2.has_value());
+  ASSERT_EQ(o2->size(), 0);
 }

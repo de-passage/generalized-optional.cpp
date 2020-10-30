@@ -349,6 +349,8 @@ public:
       storage::destroy();
     }
     storage::build(std::forward<Args>(args)...);
+    policy::value_set();
+    return storage::get_ref();
   }
 
   template <class U, class... Args>
@@ -357,6 +359,8 @@ public:
       storage::destroy();
     }
     storage::build(std::move(ilist), std::forward<Args>(args)...);
+    policy::value_set();
+    return storage::get_ref();
   }
 };
 
