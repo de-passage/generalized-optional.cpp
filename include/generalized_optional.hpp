@@ -22,7 +22,9 @@ protected:
 
   constexpr generalized_optional_storage() = default;
 
-  constexpr T *get_ptr() noexcept { return static_cast<T *>(&_storage); }
+  constexpr T *get_ptr() noexcept {
+    return reinterpret_cast<T *>(&_storage); // NOLINT
+  }
   constexpr T *get_ptr() const noexcept {
     return const_cast<generalized_optional_storage *>(this) /* NOLINT */
         ->get_ptr();
