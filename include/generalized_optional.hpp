@@ -323,15 +323,24 @@ public:
     using namespace std;
     if (has_value()) {
       if (other.has_value()) {
-        swap(get_ref(), other.get_ref());
+        value_type tmp = std::move(storage::get_ref());
+        storage::get_ref() = std::move(other).get_ref();
+        other.get_ref() = std::move(tmp);
       } else {
-        other._move(std::move(get_ref()));
+        other._move(std::move(storage::get_ref()));
         _clean();
       }
     } else if (other.has_value()) {
       _move(std::move(other.get_ref()));
       other._clean();
     }
+  }
+
+  friend void
+  swap(generalized_optional &lhv, generalized_optional &rhv) noexcept(
+      std::is_nothrow_move_constructible_v<T>
+          &&std::is_nothrow_swappable_v<T>) {
+    lhv.swap(rhv);
   }
 
   void reset() noexcept { _clean(); }

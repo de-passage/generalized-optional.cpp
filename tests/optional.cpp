@@ -131,3 +131,46 @@ TEST(Optional, MoveAssign) {
   ASSERT_TRUE(m2->moved_from); // NOLINT intentional
   ASSERT_TRUE(m1->moved_into);
 }
+
+struct noncopyable {
+  noncopyable() = default;
+  noncopyable(noncopyable &&) = default;
+  noncopyable(const noncopyable &) = delete;
+  noncopyable &operator=(noncopyable &&) = default;
+  noncopyable &operator=(const noncopyable &) = delete;
+  ~noncopyable() = default;
+};
+
+TEST(Optional, Swap) {
+  dpsg::optional<string> s;
+  dpsg::optional<string> s2;
+  s.swap(s2);
+  ASSERT_FALSE(s.has_value());
+  ASSERT_FALSE(s2.has_value());
+
+  const string str = "something else";
+  s = str;
+  s2 = hello_world;
+  s.swap(s2);
+  ASSERT_TRUE(s.has_value());
+  ASSERT_TRUE(s2.has_value());
+  ASSERT_EQ(*s, hello_world);
+  ASSERT_EQ(*s2, str);
+
+  s.reset();
+  s.swap(s2);
+  ASSERT_TRUE(s.has_value());
+  ASSERT_FALSE(s2.has_value());
+  ASSERT_EQ(*s, str);
+
+  s.swap(s2);
+  ASSERT_TRUE(s2.has_value());
+  ASSERT_FALSE(s.has_value());
+  ASSERT_EQ(*s2, str);
+
+  // checking compilation
+  dpsg::optional<noncopyable> ncp1{dpsg::in_place};
+  dpsg::optional<noncopyable> ncp2{dpsg::in_place};
+  ncp1.swap(ncp2);
+  swap(ncp1, ncp2);
+}
