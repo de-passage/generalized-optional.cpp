@@ -3,6 +3,7 @@
 
 #include <exception>
 #include <initializer_list>
+#include <limits>
 #include <type_traits>
 #include <utility>
 
@@ -393,6 +394,27 @@ public:
 };
 
 template <class T> using optional = generalized_optional<T, dependent_bool>;
+
+namespace detail {
+template <class T, class = void> struct deduce_tombstone_value;
+template <class T>
+struct deduce_tombstone_value<T, std::enable_if_t<std::is_signed_v<T>>> {
+  constexpr static inline T value = std::numeric_limits<T>::min();
+};
+template <class T>
+struct deduce_tombstone_value<T, std::enable_if_t<std::is_unsigned_v<T>>> {
+  constexpr static inline T value = std::numeric_limits<T>::max();
+};
+template <class T>
+struct deduce_tombstone_value<T, std::enable_if_t<std::is_pointer_v<T>>> {
+  constexpr static inline T value = nullptr;
+};
+
+} // namespace detail
+
+template <class T>
+using optional_tombstone = generalized_optional<
+    T, tombstone<T, detail::deduce_tombstone_value<T>::value>>;
 
 } // namespace dpsg
 
