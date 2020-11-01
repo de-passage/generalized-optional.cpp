@@ -13,67 +13,73 @@ namespace detail {
 template <class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
-template <class T> class generalized_optional_storage {
-  static_assert(!std::is_reference_v<T>,
-                "generalized_optional cannot contain a reference type. Store a "
-                "reference_wrapper or equivalent.");
+template <class T> struct generalized_optional_storage {
+  template <class B> class type : public B {
+    static_assert(
+        !std::is_reference_v<T>,
+        "generalized_optional cannot contain a reference type. Store a "
+        "reference_wrapper or equivalent.");
 
-protected:
-  std::aligned_storage_t<sizeof(T), alignof(T)> _storage;
+  protected:
+    std::aligned_storage_t<sizeof(T), alignof(T)> _storage;
 
-  constexpr generalized_optional_storage() = default;
+    constexpr type() = default;
 
-  constexpr T *get_ptr() noexcept {
-    return reinterpret_cast<T *>(&_storage); // NOLINT
-  }
-  constexpr T *get_ptr() const noexcept {
-    return const_cast<generalized_optional_storage *>(this) /* NOLINT */
-        ->get_ptr();
-  }
-  constexpr T &&get_ref() &&noexcept {
-    return reinterpret_cast<T &&>(_storage); // NOLINT
-  }
-  constexpr T &&get_ref() const &&noexcept {
-    return reinterpret_cast<T &&>(_storage); // NOLINT
-  }
-  constexpr T &get_ref() &noexcept {
-    return reinterpret_cast<T &>(_storage); // NOLINT
-  }
-  constexpr const T &get_ref() const &noexcept {
-    return reinterpret_cast<const T &>(_storage); // NOLINT
-  }
-  template <class... Args> constexpr void build(Args &&... args) {
-    ::new (&_storage) T{std::forward<Args>(args)...};
-  }
-  constexpr void destroy() noexcept { get_ref().~T(); }
+    constexpr T *get_ptr() noexcept {
+      return reinterpret_cast<T *>(&_storage); // NOLINT
+    }
+    constexpr T *get_ptr() const noexcept {
+      return const_cast<generalized_optional_storage *>(this) /* NOLINT */
+          ->get_ptr();
+    }
+    constexpr T &&get_ref() &&noexcept {
+      return reinterpret_cast<T &&>(_storage); // NOLINT
+    }
+    constexpr T &&get_ref() const &&noexcept {
+      return reinterpret_cast<T &&>(_storage); // NOLINT
+    }
+    constexpr T &get_ref() &noexcept {
+      return reinterpret_cast<T &>(_storage); // NOLINT
+    }
+    constexpr const T &get_ref() const &noexcept {
+      return reinterpret_cast<const T &>(_storage); // NOLINT
+    }
+    template <class... Args> constexpr void build(Args &&... args) {
+      ::new (&_storage) T{std::forward<Args>(args)...};
+    }
+    constexpr void destroy() noexcept { get_ref().~T(); }
+  };
 };
 } // namespace detail
 
 // Policies
 
 namespace detail {
-template <class B> struct base {
-  constexpr B *self() noexcept { return static_cast<B *>(this); }
-  constexpr const B *self() const noexcept {
-    return static_cast<const B *>(this);
+template <class... B> struct base;
+template <class T> struct base<T> {
+protected:
+  constexpr T *self() noexcept { return static_cast<T *>(this); }
+  constexpr const T *self() const noexcept {
+    return static_cast<const T *>(this);
   }
 };
+template <class T, class A, class... Bs>
+struct base<T, A, Bs...> : A::template type<base<T, Bs...>> {};
 } // namespace detail
 
 template <class T, T V = T{}> struct tombstone {
-  template <class B> struct type : detail::base<B> {
+  template <class B> struct type : B {
     [[nodiscard]] constexpr bool has_value() const noexcept {
-      return detail::base<B>::self()->get_ref() != V;
+      return B::self()->get_ref() != V;
     }
 
   protected:
-    constexpr type() noexcept { detail::base<B>::self()->build(V); }
     constexpr void value_set() const noexcept {}
-    constexpr void value_unset() const noexcept {};
+    constexpr void value_unset() const noexcept {}
   };
 };
 struct dependent_bool {
-  template <class B> struct type : detail::base<B> {
+  template <class B> struct type : B {
   protected:
     bool _has_value = false;
 
@@ -102,15 +108,16 @@ struct nullopt_t {
 
 template <class T, class Policy>
 class generalized_optional
-    : protected detail::generalized_optional_storage<T>,
-      public Policy::template type<generalized_optional<T, Policy>> {
+    : public detail::base<generalized_optional<T, Policy>, Policy,
+                          detail::generalized_optional_storage<T>> {
 public:
   using value_type = T;
 
 private:
-  using policy =
-      typename Policy::template type<generalized_optional<value_type, Policy>>;
-  using storage = detail::generalized_optional_storage<value_type>;
+  using base = detail::base<generalized_optional<T, Policy>, Policy,
+                            detail::generalized_optional_storage<T>>;
+  using policy = base;
+  using storage = base;
   using storage::build;
   using storage::destroy;
   constexpr void _clean() noexcept(std::is_nothrow_destructible_v<value_type>) {

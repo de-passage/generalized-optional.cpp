@@ -6,13 +6,15 @@
 #include <vector>
 
 template <class T>
-struct show_impl : dpsg::detail::generalized_optional_storage<T> {
-  using dpsg::detail::generalized_optional_storage<T>::build;
-  using dpsg::detail::generalized_optional_storage<T>::destroy;
-  using dpsg::detail::generalized_optional_storage<T>::get_ptr;
-  using dpsg::detail::generalized_optional_storage<T>::get_ref;
-  using dpsg::detail::generalized_optional_storage<
-      T>::generalized_optional_storage;
+struct show_impl : dpsg::detail::generalized_optional_storage<T>::template type<
+                       dpsg::detail::base<show_impl<T>>> {
+  using base = typename dpsg::detail::generalized_optional_storage<
+      T>::template type<dpsg::detail::base<show_impl<T>>>;
+  using base::base;
+  using base::build;
+  using base::destroy;
+  using base::get_ptr;
+  using base::get_ref;
 };
 
 TEST(GeneralizedOptionalStorage, ShouldWork) {
