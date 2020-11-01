@@ -69,6 +69,7 @@ struct base<T, A, Bs...> : A::template type<base<T, Bs...>> {};
 
 template <class T, T V = T{}> struct tombstone {
   template <class B> struct type : B {
+    constexpr type() noexcept { B::self()->build(V); }
     [[nodiscard]] constexpr bool has_value() const noexcept {
       return B::self()->get_ref() != V;
     }
@@ -118,22 +119,20 @@ private:
                             detail::generalized_optional_storage<T>>;
   using policy = base;
   using storage = base;
-  using storage::build;
-  using storage::destroy;
   constexpr void _clean() noexcept(std::is_nothrow_destructible_v<value_type>) {
     if (has_value()) {
-      destroy();
+      storage::destroy();
       policy::value_unset();
     }
   }
   constexpr void
   _copy(const T &t) noexcept(std::is_nothrow_copy_constructible_v<value_type>) {
-    build(t);
+    storage::build(t);
     policy::value_set();
   }
   constexpr void
   _move(T &&t) noexcept(std::is_nothrow_move_constructible_v<value_type>) {
-    build(std::move(t));
+    storage::build(std::move(t));
     policy::value_set();
   }
 
@@ -262,7 +261,7 @@ public:
     if (has_value()) {
       storage::get_ref() = std::forward<U>(value);
     } else {
-      build(std::forward<U>(value));
+      storage::build(std::forward<U>(value));
       policy::value_set();
     }
     return *this;
