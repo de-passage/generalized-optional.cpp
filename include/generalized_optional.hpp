@@ -9,6 +9,9 @@
 
 namespace dpsg {
 
+struct in_place_t {
+} constexpr static inline in_place;
+
 namespace detail {
 template <class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
@@ -24,6 +27,12 @@ template <class T> struct generalized_optional_storage {
     std::aligned_storage_t<sizeof(T), alignof(T)> _storage;
 
     constexpr type() = default;
+    template <class... Args>
+    constexpr explicit type(
+        [[maybe_unused]] in_place_t marker,
+        Args &&... args) noexcept(std::is_nothrow_constructible_v<T, Args...>) {
+      build(std::forward<Args>(args)...);
+    }
 
     constexpr T *get_ptr() noexcept {
       return reinterpret_cast<T *>(&_storage); // NOLINT
@@ -102,8 +111,6 @@ struct bad_optional_access : std::exception {
   }
 };
 
-struct in_place_t {
-} constexpr static inline in_place;
 struct nullopt_t {
 } constexpr static inline nullopt;
 
