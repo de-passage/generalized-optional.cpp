@@ -4,6 +4,7 @@
 #include <exception>
 #include <initializer_list>
 #include <limits>
+#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -27,6 +28,9 @@ template <class T> struct generalized_optional_storage {
     std::aligned_storage_t<sizeof(T), alignof(T)> _storage;
 
     constexpr type() = default;
+
+    constexpr explicit type([[maybe_unused]] std::nullopt_t marker) {}
+
     template <class... Args>
     constexpr explicit type(
         [[maybe_unused]] in_place_t marker,
@@ -73,12 +77,29 @@ protected:
   }
 };
 template <class T, class A, class... Bs>
-struct base<T, A, Bs...> : A::template type<base<T, Bs...>> {};
+struct base<T, A, Bs...> : A::template type<base<T, Bs...>> {
+private:
+  using my_base = typename A::template type<base<T, Bs...>>;
+
+public:
+  constexpr base() = default;
+  template <class... Args>
+  constexpr explicit base(Args &&... args)
+      : my_base(std::forward<Args>(args)...) {}
+};
+
 } // namespace detail
 
 template <class T, T V = T{}> struct tombstone {
   template <class B> struct type : B {
-    constexpr type() noexcept { B::self()->build(V); }
+    constexpr type() noexcept : B(in_place, V) {}
+
+    template <class... Args>
+    constexpr explicit type(bool initial_value, Args &&... args)
+        : B(std::forward<Args>(args)...) {
+      assert(initial_value || B::get_ref() == V);
+    }
+
     [[nodiscard]] constexpr bool has_value() const noexcept {
       return B::self()->get_ref() != V;
     }
@@ -94,6 +115,9 @@ struct dependent_bool {
     bool _has_value = false;
 
     constexpr type() noexcept = default;
+    template <class... Args>
+    constexpr explicit type(bool initial_value, Args &&... args)
+        : B(std::forward<Args>(args)...), _has_value(initial_value) {}
     constexpr void value_set() noexcept { _has_value = true; }
     constexpr void value_unset() noexcept { _has_value = false; }
 
@@ -180,17 +204,8 @@ public:
   }
   template <class... Args>
   constexpr explicit generalized_optional(
-      [[maybe_unused]] in_place_t in_place_ctor, Args &&... args) {
-    storage::build(std::forward<Args>(args)...);
-    policy::value_set();
-  }
-  template <class U, class... Args>
-  constexpr explicit generalized_optional(
-      [[maybe_unused]] in_place_t in_place_ctor, std::initializer_list<U> ilist,
-      Args &&... args) {
-    storage::build(ilist, std::forward<Args>(args)...);
-    policy::value_set();
-  }
+      [[maybe_unused]] in_place_t in_place_ctor, Args &&... args)
+      : base(true, in_place, std::forward<Args>(args)...) {}
 
 private:
   template <class Ty>
