@@ -104,6 +104,8 @@ template <class T, T V = T{}> struct tombstone {
       return B::self()->get_ref() != V;
     }
 
+    constexpr void destroy() noexcept { B::get_ref() = V; }
+
   protected:
     constexpr void value_set() const noexcept {}
     constexpr void value_unset() const noexcept {}
@@ -170,9 +172,11 @@ private:
 public:
   using policy::has_value;
   constexpr generalized_optional() noexcept = default;
+
   // NOLINTNEXTLINE
   constexpr generalized_optional([
       [maybe_unused]] nullopt_t empty_ctor) noexcept {}
+
   constexpr generalized_optional(const generalized_optional &other) noexcept(
       std::is_nothrow_copy_constructible_v<T>) {
     if (other.has_value()) {
@@ -222,10 +226,9 @@ public:
                                           std::is_convertible<U, value_type>>,
                        int> = 0>
   // NOLINTNEXTLINE
-  constexpr generalized_optional(U &&value) {
-    storage::build(std::forward<U>(value));
-    policy::value_set();
-  }
+  constexpr generalized_optional(U &&value)
+      : base(true, in_place, std::forward<U>(value)) {}
+
   template <
       class U = value_type,
       std::enable_if_t<
@@ -233,10 +236,8 @@ public:
                              std::negation<std::is_convertible<U, value_type>>>,
           int> = 0>
   // NOLINTNEXTLINE
-  constexpr explicit generalized_optional(U &&value) {
-    storage::build(std::forward<U>(value));
-    policy::value_set();
-  }
+  constexpr explicit generalized_optional(U &&value)
+      : base(true, in_place, std::forward<U>(value)) {}
 
   ~generalized_optional() { _clean(); }
 
