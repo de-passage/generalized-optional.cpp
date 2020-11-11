@@ -104,11 +104,8 @@ template <class T, T V = T{}> struct tombstone {
       return B::self()->get_ref() != V;
     }
 
-    constexpr void destroy() noexcept { B::get_ref() = V; }
-
   protected:
-    constexpr void value_set() const noexcept {}
-    constexpr void value_unset() const noexcept {}
+    constexpr void reset() noexcept { B::get_ref() = V; }
   };
 };
 struct dependent_bool {
@@ -120,8 +117,18 @@ struct dependent_bool {
     template <class... Args>
     constexpr explicit type(bool initial_value, Args &&... args)
         : B(std::forward<Args>(args)...), _has_value(initial_value) {}
-    constexpr void value_set() noexcept { _has_value = true; }
-    constexpr void value_unset() noexcept { _has_value = false; }
+
+    void reset() noexcept {
+      B::destroy();
+      _has_value = false;
+    }
+
+    template <class... Args>
+    void build(Args &&... args) noexcept(
+        noexcept(B::build(std::forward<Args>(args)...))) {
+      B::build(std::forward<Args>(args)...);
+      _has_value = true;
+    }
 
   public:
     [[nodiscard]] constexpr bool has_value() const noexcept {
@@ -154,19 +161,16 @@ private:
   using storage = base;
   constexpr void _clean() noexcept(std::is_nothrow_destructible_v<value_type>) {
     if (has_value()) {
-      storage::destroy();
-      policy::value_unset();
+      storage::reset();
     }
   }
   constexpr void
   _copy(const T &t) noexcept(std::is_nothrow_copy_constructible_v<value_type>) {
     storage::build(t);
-    policy::value_set();
   }
   constexpr void
   _move(T &&t) noexcept(std::is_nothrow_move_constructible_v<value_type>) {
     storage::build(std::move(t));
-    policy::value_set();
   }
 
 public:
@@ -285,7 +289,6 @@ public:
       storage::get_ref() = std::forward<U>(value);
     } else {
       storage::build(std::forward<U>(value));
-      policy::value_set();
     }
     return *this;
   }
@@ -379,7 +382,6 @@ public:
       storage::destroy();
     }
     storage::build(std::forward<Args>(args)...);
-    policy::value_set();
     return storage::get_ref();
   }
 
@@ -389,7 +391,6 @@ public:
       storage::destroy();
     }
     storage::build(std::move(ilist), std::forward<Args>(args)...);
-    policy::value_set();
     return storage::get_ref();
   }
 
