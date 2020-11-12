@@ -16,8 +16,10 @@ struct in_place_t {
 namespace detail {
 template <class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+} // namespace detail
 
-template <class T> struct generalized_optional_storage {
+namespace storage {
+template <class T> struct aligned {
   template <class B> class type : public B {
     static_assert(
         !std::is_reference_v<T>,
@@ -42,8 +44,7 @@ template <class T> struct generalized_optional_storage {
       return reinterpret_cast<T *>(&_storage); // NOLINT
     }
     constexpr T *get_ptr() const noexcept {
-      return const_cast<generalized_optional_storage *>(this) /* NOLINT */
-          ->get_ptr();
+      return reinterpret_cast<const T *>(&_storage); // NOLINT
     }
     constexpr T &&get_ref() &&noexcept {
       return reinterpret_cast<T &&>(_storage); // NOLINT
@@ -64,7 +65,7 @@ template <class T> struct generalized_optional_storage {
   };
 };
 
-} // namespace detail
+} // namespace storage
 
 // Policies
 
@@ -92,6 +93,7 @@ public:
 
 } // namespace detail
 
+namespace control {
 template <class T, T V = T{}> struct tombstone {
   template <class B> struct type : B {
     constexpr type() noexcept : B(in_place, V) {}
@@ -139,12 +141,43 @@ struct dependent_bool {
   };
 };
 
+} // namespace control
+
 // Utilities
 struct bad_optional_access : std::exception {
   [[nodiscard]] const char *what() const override {
     return "bad optional access";
   }
 };
+
+namespace access {
+struct unchecked {
+  template <class B> struct type : B {
+    template <class... Args>
+    constexpr explicit type(Args &&... args) noexcept(
+        noexcept(B(std::forward<Args>(args)...)))
+        : B(std::forward<Args>(args)...) {}
+  };
+};
+
+struct throw_exception {
+  template <class B> struct type : B {
+    template <class... Args>
+    constexpr explicit type(Args &&... args) noexcept(
+        noexcept(B(std::forward<Args>(args)...)))
+        : B(std::forward<Args>(args)...) {}
+  };
+};
+
+struct functional {
+  template <class B> struct type : B {
+    template <class... Args>
+    constexpr explicit type(Args &&... args) noexcept(
+        noexcept(B(std::forward<Args>(args)...)))
+        : B(std::forward<Args>(args)...) {}
+  };
+};
+} // namespace access
 
 struct nullopt_t {
 } constexpr static inline nullopt;
@@ -437,21 +470,23 @@ struct deduce_tombstone_value<T, std::enable_if_t<std::is_pointer_v<T>>> {
   constexpr static inline T value = nullptr;
 };
 
+} // namespace detail
+
 template <class... Args> struct policy {
   template <class T>
   using type = detail::base<generalized_optional<T, policy<Args...>>, Args...>;
 };
 
-} // namespace detail
-
 template <class T>
-using optional = generalized_optional<
-    T, detail::policy<dependent_bool, detail::generalized_optional_storage<T>>>;
+using optional =
+    generalized_optional<T,
+                         policy<access::throw_exception,
+                                control::dependent_bool, storage::aligned<T>>>;
 
 template <class T, T Default = detail::deduce_tombstone_value<T>::value>
 using optional_tombstone = generalized_optional<
-    T, detail::policy<tombstone<T, Default>,
-                      detail::generalized_optional_storage<T>>>;
+    T, policy<access::throw_exception, control::tombstone<T, Default>,
+              storage::aligned<T>>>;
 
 } // namespace dpsg
 

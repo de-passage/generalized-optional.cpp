@@ -6,10 +6,10 @@
 #include <vector>
 
 template <class T>
-struct show_impl : dpsg::detail::generalized_optional_storage<T>::template type<
+struct show_impl : dpsg::storage::aligned<T>::template type<
                        dpsg::detail::base<show_impl<T>>> {
-  using base = typename dpsg::detail::generalized_optional_storage<
-      T>::template type<dpsg::detail::base<show_impl<T>>>;
+  using base = typename dpsg::storage::aligned<T>::template type<
+      dpsg::detail::base<show_impl<T>>>;
   using base::base;
   using base::build;
   using base::destroy;
