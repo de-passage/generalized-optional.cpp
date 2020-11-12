@@ -19,8 +19,10 @@ using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 } // namespace detail
 
 namespace storage {
-template <class T> struct aligned {
+struct aligned {
   template <class B> class type : public B {
+  private:
+    using T = typename B::type;
     static_assert(
         !std::is_reference_v<T>,
         "generalized_optional cannot contain a reference type. Store a "
@@ -70,9 +72,20 @@ template <class T> struct aligned {
 // Policies
 
 namespace detail {
+template <class T> struct extract_value_type_t;
+
+template <template <class, class...> class G, class T, class... P>
+struct extract_value_type_t<G<T, P...>> {
+  using type = T;
+};
+
+template <class T>
+using extract_value_type = typename extract_value_type_t<T>::type;
+
 template <class... B> struct base;
 template <class T> struct base<T> {
 protected:
+  using type = extract_value_type<T>;
   constexpr T *self() noexcept { return static_cast<T *>(this); }
   constexpr const T *self() const noexcept {
     return static_cast<const T *>(this);
@@ -84,10 +97,14 @@ struct base<T, A, Bs...> : A::template type<base<T, Bs...>> {
 private:
   using my_base = typename A::template type<base<T, Bs...>>;
 
+protected:
+  using type = extract_value_type<T>;
+
 public:
   constexpr base() = default;
   template <class... Args>
-  constexpr explicit base(Args &&... args)
+  constexpr explicit base(Args &&... args) noexcept(
+      noexcept(std::is_nothrow_constructible_v<my_base, Args...>))
       : my_base(std::forward<Args>(args)...) {}
 };
 
@@ -96,6 +113,8 @@ public:
 namespace control {
 template <class T, T V = T{}> struct tombstone {
   template <class B> struct type : B {
+    static_assert(std::is_same_v<T, typename B::type>,
+                  "Type & tombstone mismatch");
     constexpr type() noexcept : B(in_place, V) {}
 
     template <class... Args>
@@ -165,8 +184,12 @@ template <class... Args> struct combine {
 // Access Control
 
 namespace access {
-template <class T> struct unchecked_value {
+struct unchecked_value {
   template <class B> struct type : B {
+  private:
+    using T = typename B::type;
+
+  public:
     template <class... Args>
     constexpr explicit type(Args &&... args) noexcept(
         noexcept(B(std::forward<Args>(args)...)))
@@ -178,8 +201,12 @@ template <class T> struct unchecked_value {
   };
 };
 
-template <class T> struct unchecked_deref {
+struct unchecked_deref {
   template <class B> struct type : B {
+  private:
+    using T = typename B::type;
+
+  public:
     template <class... Args>
     constexpr explicit type(Args &&... args) noexcept(
         noexcept(B(std::forward<Args>(args)...)))
@@ -193,8 +220,12 @@ template <class T> struct unchecked_deref {
   };
 };
 
-template <class T> struct throw_exception_deref {
+struct throw_exception_deref {
   template <class B> struct type : B {
+  private:
+    using T = typename B::type;
+
+  public:
     template <class... Args>
     constexpr explicit type(Args &&... args) noexcept(
         noexcept(B(std::forward<Args>(args)...)))
@@ -244,8 +275,12 @@ template <class T> struct throw_exception_deref {
   };
 };
 
-template <class T> struct throw_exception_value {
+struct throw_exception_value {
   template <class B> struct type : B {
+  private:
+    using T = typename B::type;
+
+  public:
     template <class... Args>
     constexpr explicit type(Args &&... args) noexcept(
         noexcept(B(std::forward<Args>(args)...)))
@@ -318,22 +353,17 @@ struct functional {
   };
 };
 
-template <class T>
-using throw_exception =
-    combine<throw_exception_deref<T>, throw_exception_value<T>>;
+using throw_exception = combine<throw_exception_deref, throw_exception_value>;
 
-template <class T>
-using unchecked = combine<unchecked_deref<T>, unchecked_value<T>>;
+using unchecked = combine<unchecked_deref, unchecked_value>;
 
-template <class T>
-using standard = combine<unchecked_deref<T>, throw_exception_value<T>>;
+using standard = combine<unchecked_deref, throw_exception_value>;
 
-template <class T> using extended = combine<functional, standard<T>>;
+using extended = combine<functional, standard>;
 
-template <class T> using extended_unchecked = combine<functional, unchecked<T>>;
+using extended_unchecked = combine<functional, unchecked>;
 
-template <class T>
-using extended_throw = combine<functional, throw_exception<T>>;
+using extended_throw = combine<functional, throw_exception>;
 } // namespace access
 
 struct nullopt_t {
@@ -600,14 +630,13 @@ template <class... Args> struct policy {
 };
 
 template <class T>
-using optional =
-    generalized_optional<T, policy<access::extended<T>, control::dependent_bool,
-                                   storage::aligned<T>>>;
+using optional = generalized_optional<
+    T, policy<access::extended, control::dependent_bool, storage::aligned>>;
 
 template <class T, T Default = detail::deduce_tombstone_value<T>::value>
 using optional_tombstone = generalized_optional<
-    T, policy<access::extended<T>, control::tombstone<T, Default>,
-              storage::aligned<T>>>;
+    T,
+    policy<access::extended, control::tombstone<T, Default>, storage::aligned>>;
 
 } // namespace dpsg
 
