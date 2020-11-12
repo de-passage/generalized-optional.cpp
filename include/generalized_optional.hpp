@@ -151,21 +151,45 @@ struct bad_optional_access : std::exception {
 };
 
 namespace access {
-struct unchecked {
-  template <class B> struct type : B {
-    template <class... Args>
-    constexpr explicit type(Args &&... args) noexcept(
-        noexcept(B(std::forward<Args>(args)...)))
-        : B(std::forward<Args>(args)...) {}
-  };
-};
 
-struct throw_exception {
+template <class T> struct unchecked {
   template <class B> struct type : B {
     template <class... Args>
     constexpr explicit type(Args &&... args) noexcept(
         noexcept(B(std::forward<Args>(args)...)))
         : B(std::forward<Args>(args)...) {}
+    constexpr const T *operator->() const noexcept { return B::get_ptr(); }
+    constexpr T *operator->() noexcept { return B::get_ptr(); }
+    constexpr const T &operator*() const &noexcept { return B::get_ref(); }
+    constexpr T &operator*() &noexcept { return B::get_ref(); }
+    constexpr const T &&operator*() const &&noexcept { return B::get_ref(); }
+    constexpr T &&operator*() &&noexcept { return B::get_ref(); }
+
+    constexpr T &value() &noexcept { return B::get_ref(); }
+    constexpr const T &value() const &noexcept { return B::get_ref(); }
+    constexpr T &&value() &&noexcept { return B::get_ref(); }
+    constexpr const T &&value() const &&noexcept { return B::get_ref(); }
+  };
+}; // namespace access
+
+template <class T> struct throw_exception {
+  template <class B> struct type : B {
+    template <class... Args>
+    constexpr explicit type(Args &&... args) noexcept(
+        noexcept(B(std::forward<Args>(args)...)))
+        : B(std::forward<Args>(args)...) {}
+
+    constexpr const T *operator->() const { return B::get_ptr(); }
+    constexpr T *operator->() { return B::get_ptr(); }
+    constexpr const T &operator*() const & { return B::get_ref(); }
+    constexpr T &operator*() & { return B::get_ref(); }
+    constexpr const T &&operator*() const && { return B::get_ref(); }
+    constexpr T &&operator*() && { return B::get_ref(); }
+
+    constexpr T &value() & { return B::get_ref(); }
+    constexpr const T &value() const & { return B::get_ref(); }
+    constexpr T &&value() && { return B::get_ref(); }
+    constexpr const T &&value() const && { return B::get_ref(); }
   };
 };
 
@@ -175,6 +199,34 @@ struct functional {
     constexpr explicit type(Args &&... args) noexcept(
         noexcept(B(std::forward<Args>(args)...)))
         : B(std::forward<Args>(args)...) {}
+
+    template <class U, class F>
+    [[nodiscard]] constexpr U with_value(F &&func, U &&default_value) const & {
+      if (B::has_value()) {
+        return std::forward<F>(func)(B::get_ref());
+      }
+      return std::forward<U>(default_value);
+    }
+
+    template <class U, class F>
+    [[nodiscard]] constexpr U with_value(F &&func, U &&default_value) && {
+      if (B::has_value()) {
+        return std::forward<F>(func)(std::move(B::get_ref()));
+      }
+      return std::forward<U>(default_value);
+    }
+
+    template <class F> constexpr void with_value(F &&func) const & {
+      if (B::has_value()) {
+        std::forward<F>(func)(B::get_ref());
+      }
+    }
+
+    template <class F> constexpr void with_value(F &&func) && {
+      if (B::has_value()) {
+        std::forward<F>(func)(std::move(B::get_ref()));
+      }
+    }
   };
 };
 } // namespace access
@@ -354,20 +406,9 @@ public:
     }
   }
 
-  constexpr const T *operator->() const { return storage::get_ptr(); }
-  constexpr T *operator->() { return storage::get_ptr(); }
-  constexpr const T &operator*() const & { return storage::get_ref(); }
-  constexpr T &operator*() & { return storage::get_ref(); }
-  constexpr const T &&operator*() const && { return storage::get_ref(); }
-  constexpr T &&operator*() && { return storage::get_ref(); }
   constexpr explicit operator bool() const noexcept {
-    return policy::has_value();
+    return base::has_value();
   }
-
-  constexpr T &value() & { return storage::get_ref(); }
-  constexpr const T &value() const & { return storage::get_ref(); }
-  constexpr T &&value() && { return storage::get_ref(); }
-  constexpr const T &&value() const && { return storage::get_ref(); }
 
   template <class U> constexpr T value_or(U &&default_value) const & {
     if (has_value()) {
@@ -425,34 +466,6 @@ public:
     storage::build(std::move(ilist), std::forward<Args>(args)...);
     return storage::get_ref();
   }
-
-  template <class U, class F>
-  [[nodiscard]] constexpr U with_value(F &&func, U &&default_value) const & {
-    if (has_value()) {
-      return std::forward<F>(func)(storage::get_ref());
-    }
-    return std::forward<U>(default_value);
-  }
-
-  template <class U, class F>
-  [[nodiscard]] constexpr U with_value(F &&func, U &&default_value) && {
-    if (has_value()) {
-      return std::forward<F>(func)(std::move(storage::get_ref()));
-    }
-    return std::forward<U>(default_value);
-  }
-
-  template <class F> constexpr void with_value(F &&func) const & {
-    if (has_value()) {
-      std::forward<F>(func)(storage::get_ref());
-    }
-  }
-
-  template <class F> constexpr void with_value(F &&func) && {
-    if (has_value()) {
-      std::forward<F>(func)(std::move(storage::get_ref()));
-    }
-  }
 };
 
 namespace detail {
@@ -477,16 +490,27 @@ template <class... Args> struct policy {
   using type = detail::base<generalized_optional<T, policy<Args...>>, Args...>;
 };
 
+template <class... Args> struct combine {
+  template <class B> struct type;
+
+  template <template <class...> class B, class T, class... Rs>
+  struct type<B<T, Rs...>> : B<T, Args..., Rs...> {
+    template <class... Args2>
+    constexpr explicit type(Args2 &&... args) noexcept(
+        noexcept(B<T, Args..., Rs...>(std::forward<Args2>(args)...)))
+        : B<T, Args..., Rs...>(std::forward<Args2>(args)...) {}
+  };
+};
+
 template <class T>
-using optional =
-    generalized_optional<T,
-                         policy<access::throw_exception,
-                                control::dependent_bool, storage::aligned<T>>>;
+using optional = generalized_optional<
+    T, policy<combine<access::throw_exception<T>, access::functional>,
+              control::dependent_bool, storage::aligned<T>>>;
 
 template <class T, T Default = detail::deduce_tombstone_value<T>::value>
 using optional_tombstone = generalized_optional<
-    T, policy<access::throw_exception, control::tombstone<T, Default>,
-              storage::aligned<T>>>;
+    T, policy<combine<access::throw_exception<T>, access::functional>,
+              control::tombstone<T, Default>, storage::aligned<T>>>;
 
 } // namespace dpsg
 
