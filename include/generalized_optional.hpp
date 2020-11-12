@@ -63,6 +63,7 @@ template <class T> struct generalized_optional_storage {
     constexpr void destroy() noexcept { get_ref().~T(); }
   };
 };
+
 } // namespace detail
 
 // Policies
@@ -76,6 +77,7 @@ protected:
     return static_cast<const T *>(this);
   }
 };
+
 template <class T, class A, class... Bs>
 struct base<T, A, Bs...> : A::template type<base<T, Bs...>> {
 private:
@@ -148,15 +150,12 @@ struct nullopt_t {
 } constexpr static inline nullopt;
 
 template <class T, class Policy>
-class generalized_optional
-    : public detail::base<generalized_optional<T, Policy>, Policy,
-                          detail::generalized_optional_storage<T>> {
+class generalized_optional : public Policy::template type<T> {
 public:
   using value_type = T;
 
 private:
-  using base = detail::base<generalized_optional<T, Policy>, Policy,
-                            detail::generalized_optional_storage<T>>;
+  using base = typename Policy::template type<T>;
   using policy = base;
   using storage = base;
   constexpr void _clean() noexcept(std::is_nothrow_destructible_v<value_type>) {
@@ -423,8 +422,6 @@ public:
   }
 };
 
-template <class T> using optional = generalized_optional<T, dependent_bool>;
-
 namespace detail {
 template <class T, class = void> struct deduce_tombstone_value;
 template <class T>
@@ -440,10 +437,21 @@ struct deduce_tombstone_value<T, std::enable_if_t<std::is_pointer_v<T>>> {
   constexpr static inline T value = nullptr;
 };
 
+template <class... Args> struct policy {
+  template <class T>
+  using type = detail::base<generalized_optional<T, policy<Args...>>, Args...>;
+};
+
 } // namespace detail
 
+template <class T>
+using optional = generalized_optional<
+    T, detail::policy<dependent_bool, detail::generalized_optional_storage<T>>>;
+
 template <class T, T Default = detail::deduce_tombstone_value<T>::value>
-using optional_tombstone = generalized_optional<T, tombstone<T, Default>>;
+using optional_tombstone = generalized_optional<
+    T, detail::policy<tombstone<T, Default>,
+                      detail::generalized_optional_storage<T>>>;
 
 } // namespace dpsg
 
