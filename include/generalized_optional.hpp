@@ -45,7 +45,7 @@ struct aligned {
     constexpr T *get_ptr() noexcept {
       return reinterpret_cast<T *>(&_storage); // NOLINT
     }
-    constexpr T *get_ptr() const noexcept {
+    constexpr const T *get_ptr() const noexcept {
       return reinterpret_cast<const T *>(&_storage); // NOLINT
     }
     constexpr T &&get_ref() &&noexcept {
@@ -219,8 +219,12 @@ struct unchecked_deref {
     constexpr T *operator->() noexcept { return B::get_ptr(); }
     constexpr const T &operator*() const &noexcept { return B::get_ref(); }
     constexpr T &operator*() &noexcept { return B::get_ref(); }
-    constexpr const T &&operator*() const &&noexcept { return B::get_ref(); }
-    constexpr T &&operator*() &&noexcept { return B::get_ref(); }
+    constexpr const T &&operator*() const &&noexcept {
+      return static_cast<const type &&>(*this).B::get_ref();
+    }
+    constexpr T &&operator*() &&noexcept {
+      return static_cast<type &&>(*this).B::get_ref();
+    }
   };
 };
 
@@ -265,14 +269,14 @@ struct throw_exception_deref {
 
     constexpr const T &&operator*() const && {
       if (B::has_value()) {
-        return B::get_ref();
+        return static_cast<const type &&>(*this).B::get_ref();
       }
       throw bad_optional_access{};
     }
 
     constexpr T &&operator*() && {
       if (B::has_value()) {
-        return B::get_ref();
+        return static_cast<type &&>(*this).B::get_ref();
       }
       throw bad_optional_access{};
     }
