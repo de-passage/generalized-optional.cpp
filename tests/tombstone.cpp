@@ -69,3 +69,24 @@ TEST(Tombstone, MoveAssignment) {
   ASSERT_TRUE(i2.has_value());
   ASSERT_EQ(*i2, fourty_two);
 }
+
+TEST(Tombstone, ValueOr) {
+  tsd<int> i1;
+  tsd<int> i2{fourty_two};
+  ASSERT_EQ(i1.value_or(fourty_two), fourty_two);
+  ASSERT_EQ(i2.value_or(0), fourty_two);
+}
+
+TEST(Tombstone, WithValue) {
+  tsd<int> i1;
+  tsd<int> i2{fourty_two};
+  int r = fourty_two;
+  auto f = [&r]([[maybe_unused]] int i) { r = 0; };
+  i1.with_value(f);
+  ASSERT_EQ(r, fourty_two);
+  i2.with_value(f);
+  ASSERT_EQ(r, 0);
+  auto f2 = [](int i) { return i * 2; };
+  ASSERT_EQ(i1.with_value(f2, -1), -1);
+  ASSERT_EQ(i2.with_value(f2, -1), fourty_two * 2);
+}
