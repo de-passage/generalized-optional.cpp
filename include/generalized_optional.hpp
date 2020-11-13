@@ -51,8 +51,8 @@ struct aligned {
     constexpr T &&get_ref() &&noexcept {
       return reinterpret_cast<T &&>(_storage); // NOLINT
     }
-    constexpr T &&get_ref() const &&noexcept {
-      return reinterpret_cast<T &&>(_storage); // NOLINT
+    constexpr const T &&get_ref() const &&noexcept {
+      return reinterpret_cast<const T &&>(_storage); // NOLINT
     }
     constexpr T &get_ref() &noexcept {
       return reinterpret_cast<T &>(_storage); // NOLINT
@@ -196,8 +196,12 @@ struct unchecked_value {
         : B(std::forward<Args>(args)...) {}
     constexpr T &value() &noexcept { return B::get_ref(); }
     constexpr const T &value() const &noexcept { return B::get_ref(); }
-    constexpr T &&value() &&noexcept { return B::get_ref(); }
-    constexpr const T &&value() const &&noexcept { return B::get_ref(); }
+    constexpr T &&value() &&noexcept {
+      return static_cast<type &&>(*this).B::get_ref();
+    }
+    constexpr const T &&value() const &&noexcept {
+      return static_cast<const type &&>(*this).B::get_ref();
+    }
   };
 };
 
@@ -302,14 +306,14 @@ struct throw_exception_value {
 
     constexpr T &&value() && {
       if (B::has_value()) {
-        return B::get_ref();
+        return static_cast<type &&>(*this).B::get_ref();
       }
       throw bad_optional_access{};
     }
 
     constexpr const T &&value() const && {
       if (B::has_value()) {
-        return B::get_ref();
+        return static_cast<const type &&>(*this).B::get_ref();
       }
       throw bad_optional_access{};
     }

@@ -51,7 +51,8 @@ set(TEST_SRC
     tests/optional.cpp
     tests/static_tests.cpp
     tests/storage.cpp
-    tests/tombstone.cpp)
+    tests/tombstone.cpp
+    tests/access.cpp)
 add_executable(tests ${TEST_SRC})
 target_link_libraries(tests gtest_main)
 target_include_directories(tests PUBLIC include)
